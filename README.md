@@ -110,24 +110,26 @@ Release builds are smaller and faster due to LTO and codegen optimizations.
 
 The game is built with a clean separation of concerns:
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  TUI Thread (main)                               │
-│                                                     │
-│  • Renders board and UI                             │
-│  • Handles keyboard input                          │
-│  • Forwards confirmed moves to Coordinator            │
-└─────────────────────────────────────────────────────────┘
-                     ▲ mpsc::channel
-                     │
-┌─────────────────────────────────────────────────────────┐
-│  Game Coordinator (tokio::spawn)                  │
-│                                                     │
-│  • Owns game state (shakmaty wrapper)          │
-│  • Validates moves                                 │
-│  • Detects check/checkmate                         │
-│  • Broadcasts state updates back to TUI             │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph TUI["TUI Thread (main)"]
+        A[Render board and UI]
+        B[Handle keyboard input]
+        C[Forward confirmed moves<br/>to Coordinator]
+    end
+
+    subgraph Coordinator["Game Coordinator<br/>(tokio::spawn)"]
+        D[Owns game state<br/>(shakmaty wrapper)]
+        E[Validates moves]
+        F[Detects check/checkmate]
+        G[Broadcasts state updates<br/>back to TUI]
+    end
+
+    C -->|move_tx| E
+    G -->|app_event_tx| A
+
+    style TUI fill:#e1f5fe
+    style Coordinator fill:#f9a825
 ```
 
 This design allows:
