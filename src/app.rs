@@ -1,89 +1,96 @@
+use crate::chess::{GameSnapshot, Move, Outcome};
 use crate::event::{AppEvent, Event, EventHandler};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crate::player::MoveSender;
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 
-/// Application.
-#[derive(Debug)]
-pub struct App {
-    /// Is the application running?
-    pub running: bool,
-    /// Counter.
-    pub counter: u8,
-    /// Event handler.
-    pub events: EventHandler,
-}
+pub mod screen;
 
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            running: true,
-            counter: 0,
-            events: EventHandler::new(),
-        }
-    }
+pub use screen::{GameScreen, Screen};
+
+/// Main application state - pure router only
+///
+/// App has two jobs:
+/// 1. Render the active screen
+/// 2. Route events (Crossterm or AppEvent) to the active screen
+pub struct App {
+    running: bool,
+    events: EventHandler,
+    move_tx: MoveSender,
+    screen: Screen,
 }
 
 impl App {
-    /// Constructs a new instance of [`App`].
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(events: EventHandler, move_tx: MoveSender) -> Self {
+        Self {
+            running: true,
+            events,
+            move_tx,
+            screen: Screen::Game(GameScreen::new()),
+        }
     }
 
-    /// Run the application's main loop.
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
         while self.running {
-            terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
+            terminal.draw(|frame| self.screen.render(frame))?;
+
             match self.events.next().await? {
-                Event::Tick => self.tick(),
-                Event::Crossterm(event) => match event {
-                    crossterm::event::Event::Key(key_event)
-                        if key_event.kind == crossterm::event::KeyEventKind::Press =>
-                    {
-                        self.handle_key_events(key_event)?
+                Event::Tick => {
+                    self.screen.tick();
+                }
+                Event::Crossterm(event) => self.handle_crossterm(event),
+                Event::App(event) => self.route(event),
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_crossterm(&mut self, event: crossterm::event::Event) {
+        if let crossterm::event::Event::Key(key) = event {
+            if key.kind != KeyEventKind::Press {
+                return;
+            }
+
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    if !self.screen.wants_esc() {
+                        self.events.send(AppEvent::Quit);
+                    } else {
+                        self.screen.handle_esc();
                     }
-                    _ => {}
-                },
-                Event::App(app_event) => match app_event {
-                    AppEvent::Increment => self.increment_counter(),
-                    AppEvent::Decrement => self.decrement_counter(),
-                    AppEvent::Quit => self.quit(),
-                },
+                }
+                KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                    self.events.send(AppEvent::Quit);
+                }
+                KeyCode::Char('n') => {
+                    self.events.send(AppEvent::NewGame);
+                }
+                _ => {
+                    if let Some(mv) = self.screen.handle_key(key.code) {
+                        let _ = self.move_tx.try_send(mv);
+                    }
+                }
             }
         }
-        Ok(())
     }
 
-    /// Handles the key events and updates the state of [`App`].
-    pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Esc | KeyCode::Char('q') => self.events.send(AppEvent::Quit),
-            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
-                self.events.send(AppEvent::Quit)
+    fn route(&mut self, event: AppEvent) {
+        match event {
+            AppEvent::Quit => {
+                self.running = false;
             }
-            KeyCode::Right => self.events.send(AppEvent::Increment),
-            KeyCode::Left => self.events.send(AppEvent::Decrement),
-            // Other handlers you could add here.
-            _ => {}
+            AppEvent::NewGame => {
+                self.screen = Screen::Game(GameScreen::new());
+            }
+            AppEvent::StateUpdate(snapshot) => {
+                self.screen.apply_snapshot(snapshot);
+            }
+            AppEvent::GameOver(outcome) => {
+                self.screen.set_game_over(outcome);
+            }
+            AppEvent::IllegalMove => {
+                self.screen.flash_illegal();
+            }
         }
-        Ok(())
-    }
-
-    /// Handles the tick event of the terminal.
-    ///
-    /// The tick event is where you can update the state of your application with any logic that
-    /// needs to be updated at a fixed frame rate. E.g. polling a server, updating an animation.
-    pub fn tick(&self) {}
-
-    /// Set running to false to quit the application.
-    pub fn quit(&mut self) {
-        self.running = false;
-    }
-
-    pub fn increment_counter(&mut self) {
-        self.counter = self.counter.saturating_add(1);
-    }
-
-    pub fn decrement_counter(&mut self) {
-        self.counter = self.counter.saturating_sub(1);
     }
 }

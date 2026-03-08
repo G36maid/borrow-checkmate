@@ -1,10 +1,7 @@
-use shakmaty::{Chess, Color, Move, Outcome, Position, Square};
+use shakmaty::{Chess, Position};
 use std::fmt;
 
-// Re-export shakmaty types directly
-pub use shakmaty::{Board, Color, Move, Outcome, Piece, Role, Square};
-pub use shakmaty::MoveList;
-pub use shakmaty::PlayError;
+pub use shakmaty::{Board, Color, Move, MoveList, Outcome, Piece, PlayError, Role, Square};
 
 /// Snapshot of the game state sent to TUI after each move
 #[derive(Clone, Debug)]
@@ -90,7 +87,8 @@ impl Game {
         }
 
         // Apply the move
-        self.pos = self.pos.play(mv)?;
+        let new_pos = self.pos.clone().play(mv)?;
+        self.pos = new_pos;
         self.move_history.push(mv);
 
         Ok(())
@@ -101,25 +99,27 @@ impl Game {
         if let Some(prev_pos) = self.history.pop() {
             self.pos = prev_pos;
             self.move_history.pop();
-            
+
             // Recompute captured pieces by simulating from start
             let mut temp_pos = Chess::default();
             self.captured_white.clear();
             self.captured_black.clear();
-            
+
             // Simulate all moves except the last one (which we just undid)
             for mv in &self.move_history {
+                let capture_color = temp_pos.turn();
                 if let Some(capture) = mv.capture() {
-                    let capture_color = temp_pos.turn();
                     if capture_color == Color::White {
                         self.captured_black.push(capture);
                     } else {
                         self.captured_white.push(capture);
                     }
                 }
-                temp_pos = temp_pos.play(*mv).ok();
+                if let Ok(new_pos) = temp_pos.clone().play(*mv) {
+                    temp_pos = new_pos;
+                }
             }
-            
+
             true
         } else {
             false
@@ -128,7 +128,11 @@ impl Game {
 
     /// Get the game outcome (None if game still in progress)
     pub fn outcome(&self) -> Option<Outcome> {
-        self.pos.outcome()
+        if self.pos.is_game_over() {
+            Some(self.pos.outcome())
+        } else {
+            None
+        }
     }
 }
 

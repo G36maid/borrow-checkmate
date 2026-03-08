@@ -40,19 +40,6 @@ pub enum AppEvent {
     IllegalMove,
 }
 
-/// Application events.
-///
-/// You can extend this enum with your own custom events.
-#[derive(Clone, Debug)]
-pub enum AppEvent {
-    /// Increment the counter.
-    Increment,
-    /// Decrement the counter.
-    Decrement,
-    /// Quit the application.
-    Quit,
-}
-
 /// Terminal event handler.
 #[derive(Debug)]
 pub struct EventHandler {
