@@ -3,7 +3,7 @@ use crate::chess::{Color, Piece, Role, Square};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color as RColor, Style},
+    style::{Color as RColor, Modifier, Style},
     widgets::Widget,
 };
 
@@ -74,23 +74,32 @@ impl<'a> Widget for ChessBoard<'a> {
 
                 let bg_color = Self::square_color(rank, file);
                 let mut style = Style::new().bg(bg_color);
+                let mut extra_modifier: Option<Modifier> = None;
 
-                if Some(sq) == self.game.selected() {
-                    style = style.bg(RColor::Rgb(130, 151, 105));
-                } else if Some(sq) == Some(self.game.cursor()) {
+                // Priority order (chess-tui pattern):
+                // 1. cursor (lowest)
+                // 2. last move highlight
+                // 3. selected piece
+                // 4. king in check (highest — overrides everything, + SLOW_BLINK)
+                if Some(sq) == Some(self.game.cursor()) {
                     style = style.bg(RColor::Rgb(100, 111, 64));
                 }
 
                 if let Some(last_move) = snapshot.last_move {
-                    if Some(sq) == last_move.from() || Some(sq) == Some(last_move.to()) {
+                    if last_move.from() == Some(sq) || last_move.to() == sq {
                         style = style.bg(RColor::Rgb(205, 210, 106));
                     }
                 }
 
+                if Some(sq) == self.game.selected() {
+                    style = style.bg(RColor::Rgb(130, 151, 105));
+                }
+
                 if snapshot.is_check {
                     if let Some(king_sq) = snapshot.board.king_of(snapshot.turn) {
-                        if Some(sq) == Some(king_sq) {
+                        if sq == king_sq {
                             style = style.bg(RColor::Red);
+                            extra_modifier = Some(Modifier::SLOW_BLINK);
                         }
                     }
                 }
@@ -111,11 +120,15 @@ impl<'a> Widget for ChessBoard<'a> {
                     }
                 };
 
-                let content_style = if cell_content == "·" {
-                    style.add_modifier(ratatui::style::Modifier::DIM)
+                let mut content_style = if cell_content == "·" {
+                    style.add_modifier(Modifier::DIM)
                 } else {
                     style
                 };
+
+                if let Some(modifier) = extra_modifier {
+                    content_style = content_style.add_modifier(modifier);
+                }
                 buf.set_string(
                     x + (file_width / 2).saturating_sub(1),
                     y,

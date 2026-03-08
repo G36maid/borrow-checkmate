@@ -3,40 +3,40 @@ use crossterm::event::KeyCode;
 use ratatui::Frame;
 
 fn square_up(sq: Square) -> Square {
-    let current = sq as u8;
+    let current = sq as u32;
     if current >= 56 {
         sq
     } else {
-        unsafe { std::mem::transmute(current + 8) }
+        Square::new(current + 8)
     }
 }
 
 fn square_down(sq: Square) -> Square {
-    let current = sq as u8;
+    let current = sq as u32;
     if current < 8 {
         sq
     } else {
-        unsafe { std::mem::transmute(current - 8) }
+        Square::new(current - 8)
     }
 }
 
 fn square_left(sq: Square) -> Square {
-    let current = sq as u8;
+    let current = sq as u32;
     let file = current % 8;
     if file == 0 {
         sq
     } else {
-        unsafe { std::mem::transmute(current - 1) }
+        Square::new(current - 1)
     }
 }
 
 fn square_right(sq: Square) -> Square {
-    let current = sq as u8;
+    let current = sq as u32;
     let file = current % 8;
     if file == 7 {
         sq
     } else {
-        unsafe { std::mem::transmute(current + 1) }
+        Square::new(current + 1)
     }
 }
 
@@ -117,9 +117,11 @@ impl GameScreen {
             }
             KeyCode::Left => {
                 if self.promotion_pending.is_some() {
-                    if self.promotion_cursor > 0 {
-                        self.promotion_cursor -= 1;
-                    }
+                    self.promotion_cursor = if self.promotion_cursor > 0 {
+                        self.promotion_cursor - 1
+                    } else {
+                        3
+                    };
                 } else {
                     self.cursor = square_left(self.cursor);
                 }
@@ -127,9 +129,7 @@ impl GameScreen {
             }
             KeyCode::Right => {
                 if self.promotion_pending.is_some() {
-                    if self.promotion_cursor < 3 {
-                        self.promotion_cursor += 1;
-                    }
+                    self.promotion_cursor = (self.promotion_cursor + 1) % 4;
                 } else {
                     self.cursor = square_right(self.cursor);
                 }

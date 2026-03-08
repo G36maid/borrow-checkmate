@@ -1,4 +1,5 @@
 pub mod board;
+pub mod gameover;
 pub mod info;
 pub mod promotion;
 
@@ -21,4 +22,5 @@ pub fn render_game(frame: &mut Frame, game: &GameScreen) {
     board::render(frame, main_chunks[0], game);
     info::render(frame, main_chunks[1], game);
     promotion::render(frame, size, game);
+    gameover::render(frame, size, game);
 }

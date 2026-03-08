@@ -102,7 +102,7 @@ impl<'a> Widget for InfoPanel<'a> {
                 .collect();
             lines.push(Line::from(vec![
                 Span::raw("Captured by White: "),
-                Span::styled(captured, Style::new().fg(RColor::Gray)),
+                Span::styled(captured, Style::new().fg(RColor::DarkGray)),
             ]));
         }
 
