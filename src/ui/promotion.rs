@@ -47,29 +47,57 @@ impl<'a> Widget for PromotionDialog<'a> {
         let roles = [Role::Queen, Role::Rook, Role::Bishop, Role::Knight];
         let role_labels = ["Q", "R", "B", "N"];
 
+        let popup_width = area.width.min(40);
+        let popup_height = area.height.min(7);
+
+        let popup_x = area.x + (area.width - popup_width) / 2;
+        let popup_y = area.y + (area.height - popup_height) / 2;
+        let popup = Rect::new(popup_x, popup_y, popup_width, popup_height);
+
         let block = ratatui::widgets::Block::bordered()
-            .title("Promote pawn to")
+            .title("Promote pawn to:")
             .title_style(Style::new().fg(RColor::Yellow));
 
-        let inner = block.inner(area);
-        block.render(area, buf);
+        let inner = block.inner(popup);
+        block.render(popup, buf);
 
-        if inner.height < 3 {
+        if inner.height < 4 {
             return;
         }
 
         let piece_row = inner.y + 1;
         let label_row = inner.y + 2;
+        let caret_row = inner.y + 3;
 
         let width_per_role = inner.width / 4;
+
+        let cursor_idx = self.game.promotion_cursor();
 
         for (i, &role) in roles.iter().enumerate() {
             let x = inner.x + i as u16 * width_per_role + (width_per_role / 2).saturating_sub(1);
 
             let piece = Self::role_char(role, snapshot.turn);
-            buf.set_string(x, piece_row, piece, Style::new().bold());
+            let label = role_labels[i];
+            let is_selected = i == cursor_idx;
 
-            buf.set_string(x, label_row, role_labels[i], Style::new().fg(RColor::Gray));
+            let style = if is_selected {
+                Style::new().bg(RColor::Cyan).fg(RColor::Black).bold()
+            } else {
+                Style::new().bold()
+            };
+
+            buf.set_string(x, piece_row, piece, style);
+
+            let label_style = if is_selected {
+                Style::new().bg(RColor::Cyan).fg(RColor::Black).bold()
+            } else {
+                Style::new().fg(RColor::Gray)
+            };
+            buf.set_string(x, label_row, label, label_style);
+
+            if is_selected {
+                buf.set_string(x, caret_row, "^", Style::new().fg(RColor::Cyan));
+            }
         }
 
         let center_x = inner.x + inner.width / 2;

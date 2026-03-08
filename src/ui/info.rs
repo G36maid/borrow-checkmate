@@ -1,5 +1,5 @@
 use crate::app::screen::GameScreen;
-use crate::chess::{Color, Role};
+use crate::chess::{Color, Move, Role};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -46,14 +46,19 @@ impl<'a> Widget for InfoPanel<'a> {
 
         let mut lines = Vec::new();
 
+        let turn_piece = match snapshot.turn {
+            Color::White => "♙",
+            Color::Black => "♟",
+        };
         let turn_text = match snapshot.turn {
             Color::White => "White's turn",
             Color::Black => "Black's turn",
         };
-        lines.push(Line::from(vec![Span::styled(
-            turn_text,
-            Style::new().fg(RColor::Cyan).bold(),
-        )]));
+        lines.push(Line::from(vec![
+            Span::styled(turn_piece, Style::new().fg(RColor::Cyan)),
+            Span::raw(" "),
+            Span::styled(turn_text, Style::new().fg(RColor::Cyan).bold()),
+        ]));
 
         if let Some(outcome) = self.game.game_over() {
             let outcome_text = format!("Game Over: {}", outcome);
@@ -102,7 +107,29 @@ impl<'a> Widget for InfoPanel<'a> {
         }
 
         lines.push(Line::default());
-        lines.push(Line::from("Controls: [n] New  [q] Quit"));
+        if !snapshot.move_history.is_empty() {
+            let max_pairs = area.height.saturating_sub(8) as usize;
+            let recent_pairs_start = snapshot.move_history.len().saturating_sub(max_pairs * 2);
+            let recent_moves: &[Move] = &snapshot.move_history[recent_pairs_start..];
+            let move_text: String = recent_moves
+                .chunks(2)
+                .enumerate()
+                .map(|(i, pair)| {
+                    let move_num = (recent_pairs_start / 2) + i + 1;
+                    let white_move = pair.get(0).map(|mv| mv.to_string()).unwrap_or_default();
+                    let black_move = pair.get(1).map(|mv| mv.to_string()).unwrap_or_default();
+                    format!("{}. {} {}", move_num, white_move, black_move)
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            lines.push(Line::from(vec![
+                Span::raw("Move history:\n"),
+                Span::styled(move_text, Style::new().fg(RColor::Gray)),
+            ]));
+        }
+
+        lines.push(Line::default());
+        lines.push(Line::from("Controls: [n] New  [u] Undo  [q] Quit"));
 
         let y_start = area.y;
         for (i, line) in lines.iter().enumerate() {
