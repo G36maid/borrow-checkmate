@@ -43,20 +43,18 @@ impl Coordinator {
             match self.cmd_rx.recv().await {
                 None => break,
                 Some(cmd) => match cmd {
-                    CoordinatorCommand::MakeMove(mv) => {
-                        match self.game.make_move(mv) {
-                            Ok(()) => {
-                                self.broadcast_state();
-                                if self.game.outcome().is_some() {
-                                    self.inject(AppEvent::GameOver(self.game.outcome().unwrap()));
-                                    break;
-                                }
-                            }
-                            Err(_) => {
-                                self.inject(AppEvent::IllegalMove);
+                    CoordinatorCommand::MakeMove(mv) => match self.game.make_move(mv) {
+                        Ok(()) => {
+                            self.broadcast_state();
+                            if self.game.outcome().is_some() {
+                                self.inject(AppEvent::GameOver(self.game.outcome().unwrap()));
+                                break;
                             }
                         }
-                    }
+                        Err(_) => {
+                            self.inject(AppEvent::IllegalMove);
+                        }
+                    },
                     CoordinatorCommand::Undo => {
                         if self.game.undo() {
                             self.broadcast_state();
