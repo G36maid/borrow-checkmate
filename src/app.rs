@@ -1,8 +1,10 @@
 use crate::chess::{GameSnapshot, Move, Outcome};
+use crate::coordinator::CoordinatorCommand;
 use crate::event::{AppEvent, Event, EventHandler};
 use crate::player::MoveSender;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
+use tokio::sync::mpsc;
 
 pub mod screen;
 
@@ -16,16 +18,16 @@ pub use screen::{GameScreen, Screen};
 pub struct App {
     running: bool,
     events: EventHandler,
-    move_tx: MoveSender,
+    cmd_tx: mpsc::Sender<CoordinatorCommand>,
     screen: Screen,
 }
 
 impl App {
-    pub fn new(events: EventHandler, move_tx: MoveSender) -> Self {
+    pub fn new(events: EventHandler, cmd_tx: mpsc::Sender<CoordinatorCommand>) -> Self {
         Self {
             running: true,
             events,
-            move_tx,
+            cmd_tx,
             screen: Screen::Game(GameScreen::new()),
         }
     }
@@ -65,9 +67,12 @@ impl App {
                 KeyCode::Char('n') => {
                     self.events.send(AppEvent::NewGame);
                 }
+                KeyCode::Char('u') => {
+                    self.events.send(AppEvent::Undo);
+                }
                 _ => {
                     if let Some(mv) = self.screen.handle_key(key.code) {
-                        let _ = self.move_tx.try_send(mv);
+                        let _ = self.cmd_tx.try_send(CoordinatorCommand::MakeMove(mv));
                     }
                 }
             }
@@ -81,6 +86,7 @@ impl App {
             }
             AppEvent::NewGame => {
                 self.screen = Screen::Game(GameScreen::new());
+                let _ = self.cmd_tx.try_send(CoordinatorCommand::NewGame);
             }
             AppEvent::StateUpdate(snapshot) => {
                 self.screen.apply_snapshot(snapshot);
@@ -90,6 +96,9 @@ impl App {
             }
             AppEvent::IllegalMove => {
                 self.screen.flash_illegal();
+            }
+            AppEvent::Undo => {
+                let _ = self.cmd_tx.try_send(CoordinatorCommand::Undo);
             }
         }
     }

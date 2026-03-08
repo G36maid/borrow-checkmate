@@ -1,4 +1,4 @@
-use crate::chess::{GameSnapshot, Move, Outcome, Role, Square};
+use crate::chess::{GameSnapshot, Move, MoveList, Outcome, Role, Square};
 use crossterm::event::KeyCode;
 use ratatui::Frame;
 
@@ -45,8 +45,9 @@ pub struct GameScreen {
     snapshot: Option<GameSnapshot>,
     cursor: Square,
     selected: Option<Square>,
-    legal_from_selected: Vec<Move>,
+    legal_from_selected: MoveList,
     promotion_pending: Option<(Square, Square)>,
+    promotion_cursor: usize,
     game_over: Option<Outcome>,
     illegal_flash: u8,
 }
@@ -63,8 +64,9 @@ impl GameScreen {
             snapshot: None,
             cursor: Square::E4,
             selected: None,
-            legal_from_selected: Vec::new(),
+            legal_from_selected: MoveList::new(),
             promotion_pending: None,
+            promotion_cursor: 0,
             game_over: None,
             illegal_flash: 0,
         }
@@ -90,6 +92,7 @@ impl GameScreen {
     pub fn handle_esc(&mut self) {
         if self.promotion_pending.is_some() {
             self.promotion_pending = None;
+            self.promotion_cursor = 0;
         } else if self.selected.is_some() {
             self.selected = None;
             self.legal_from_selected.clear();
@@ -101,7 +104,7 @@ impl GameScreen {
             return None;
         }
 
-        let snapshot = self.snapshot.as_ref()?;
+        let _snapshot = self.snapshot.as_ref()?;
 
         match key {
             KeyCode::Up => {
@@ -113,11 +116,23 @@ impl GameScreen {
                 None
             }
             KeyCode::Left => {
-                self.cursor = square_left(self.cursor);
+                if self.promotion_pending.is_some() {
+                    if self.promotion_cursor > 0 {
+                        self.promotion_cursor -= 1;
+                    }
+                } else {
+                    self.cursor = square_left(self.cursor);
+                }
                 None
             }
             KeyCode::Right => {
-                self.cursor = square_right(self.cursor);
+                if self.promotion_pending.is_some() {
+                    if self.promotion_cursor < 3 {
+                        self.promotion_cursor += 1;
+                    }
+                } else {
+                    self.cursor = square_right(self.cursor);
+                }
                 None
             }
             KeyCode::Enter => self.handle_enter(),
@@ -129,14 +144,17 @@ impl GameScreen {
         let snapshot = self.snapshot.as_ref()?;
 
         if let Some((from, to)) = self.promotion_pending {
+            let roles = [Role::Queen, Role::Rook, Role::Bishop, Role::Knight];
+            let promotion_role = roles[self.promotion_cursor];
             let mv = Move::Normal {
-                role: Role::Queen,
+                role: Role::Pawn,
                 from,
                 to,
                 capture: snapshot.board.piece_at(to).map(|p| p.role),
-                promotion: Some(Role::Queen),
+                promotion: Some(promotion_role),
             };
             self.promotion_pending = None;
+            self.promotion_cursor = 0;
             self.selected = None;
             Some(mv)
         } else if let Some(selected) = self.selected {
@@ -196,6 +214,10 @@ impl GameScreen {
 
     pub fn promotion_pending(&self) -> Option<(Square, Square)> {
         self.promotion_pending
+    }
+
+    pub fn promotion_cursor(&self) -> usize {
+        self.promotion_cursor
     }
 
     pub fn game_over(&self) -> Option<&Outcome> {
