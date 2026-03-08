@@ -1,3 +1,4 @@
+use crate::chess::{GameSnapshot, Outcome};
 use color_eyre::eyre::OptionExt;
 use crossterm::event::Event as CrosstermEvent;
 use futures::{FutureExt, StreamExt};
@@ -24,6 +25,19 @@ pub enum Event {
     ///
     /// Use this event to emit custom events that are specific to your application.
     App(AppEvent),
+}
+
+/// Chess-specific application events
+#[derive(Clone, Debug)]
+pub enum AppEvent {
+    Quit,
+    NewGame,
+    /// State update from Coordinator with current board position
+    StateUpdate(GameSnapshot),
+    /// Game ended with the given outcome
+    GameOver(Outcome),
+    /// Last move was illegal
+    IllegalMove,
 }
 
 /// Application events.
@@ -81,6 +95,13 @@ impl EventHandler {
         // Ignore the result as the reciever cannot be dropped while this struct still has a
         // reference to it
         let _ = self.sender.send(Event::App(app_event));
+    }
+
+    /// Returns a clone of the internal event sender.
+    ///
+    /// Used by the Coordinator to inject AppEvent into the TUI's event loop from a background task.
+    pub fn sender(&self) -> mpsc::UnboundedSender<Event> {
+        self.sender.clone()
     }
 }
 
