@@ -34,10 +34,12 @@ pub enum AppEvent {
     NewGame,
     /// State update from Coordinator with current board position
     StateUpdate(GameSnapshot),
-    /// Game ended with the given outcome
+    /// Game ended with given outcome
     GameOver(Outcome),
     /// Last move was illegal
     IllegalMove,
+    /// Undo the last move
+    Undo,
 }
 
 /// Terminal event handler.

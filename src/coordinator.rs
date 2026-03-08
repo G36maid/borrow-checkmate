@@ -1,7 +1,13 @@
 use crate::chess::{Game, Move};
 use crate::event::{AppEvent, Event};
-use crate::player::{HotseatPlayer, MoveReceiver, Player};
+use crate::player::{HotseatPlayer, Player};
 use tokio::sync::mpsc;
+
+pub enum CoordinatorCommand {
+    MakeMove(Move),
+    Undo,
+    NewGame,
+}
 
 /// Game Coordinator - owns game state and runs as a background task
 ///
@@ -12,20 +18,20 @@ struct Coordinator {
     game: Game,
     white: Player,
     black: Player,
-    move_rx: MoveReceiver,
+    cmd_rx: mpsc::Receiver<CoordinatorCommand>,
     app_tx: mpsc::UnboundedSender<Event>,
 }
 
 impl Coordinator {
     fn new(
-        move_rx: MoveReceiver,
+        cmd_rx: mpsc::Receiver<CoordinatorCommand>,
         app_tx: mpsc::UnboundedSender<Event>,
     ) -> Self {
         Self {
             game: Game::new(),
             white: Player::Hotseat(HotseatPlayer::new(shakmaty::Color::White)),
             black: Player::Hotseat(HotseatPlayer::new(shakmaty::Color::Black)),
-            move_rx,
+            cmd_rx,
             app_tx,
         }
     }
@@ -34,22 +40,33 @@ impl Coordinator {
         self.broadcast_state();
 
         loop {
-            match self.move_rx.recv().await {
+            match self.cmd_rx.recv().await {
                 None => break,
-                Some(mv) => {
-                    match self.game.make_move(mv) {
-                        Ok(()) => {
-                            self.broadcast_state();
-                            if self.game.outcome().is_some() {
-                                self.inject(AppEvent::GameOver(self.game.outcome().unwrap()));
-                                break;
+                Some(cmd) => match cmd {
+                    CoordinatorCommand::MakeMove(mv) => {
+                        match self.game.make_move(mv) {
+                            Ok(()) => {
+                                self.broadcast_state();
+                                if self.game.outcome().is_some() {
+                                    self.inject(AppEvent::GameOver(self.game.outcome().unwrap()));
+                                    break;
+                                }
+                            }
+                            Err(_) => {
+                                self.inject(AppEvent::IllegalMove);
                             }
                         }
-                        Err(_) => {
-                            self.inject(AppEvent::IllegalMove);
+                    }
+                    CoordinatorCommand::Undo => {
+                        if self.game.undo() {
+                            self.broadcast_state();
                         }
                     }
-                }
+                    CoordinatorCommand::NewGame => {
+                        self.game = Game::new();
+                        self.broadcast_state();
+                    }
+                },
             }
         }
     }
@@ -66,6 +83,6 @@ impl Coordinator {
 /// Spawn the game coordinator as a background task
 ///
 /// This should be called once from main.rs during initialization.
-pub async fn run(move_rx: MoveReceiver, app_tx: mpsc::UnboundedSender<Event>) {
-    Coordinator::new(move_rx, app_tx).run().await;
+pub async fn run(cmd_rx: mpsc::Receiver<CoordinatorCommand>, app_tx: mpsc::UnboundedSender<Event>) {
+    Coordinator::new(cmd_rx, app_tx).run().await;
 }
