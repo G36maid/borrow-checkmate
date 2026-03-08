@@ -75,13 +75,10 @@ impl Game {
 
         // Track captures
         if let Some(capture) = mv.capture() {
-            let capturer = mv.role();
             let capture_color = self.pos.turn();
             if capture_color == Color::White {
-                // Black captured a white piece
                 self.captured_black.push(capture);
             } else {
-                // White captured a black piece
                 self.captured_white.push(capture);
             }
         }
